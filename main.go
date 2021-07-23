@@ -6,5 +6,7 @@ func test_kernel() {
 
 func main() {
 	test_kernel()
+	test_config()
+	test_mandelbrot()
 
 }
