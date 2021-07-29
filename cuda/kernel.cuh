@@ -10,9 +10,11 @@ typedef struct {
 	int yDim;
 	double xDelta;
 	double yDelta;
+	int xResolution;
+	int yResolution;
 	int iterations;
 } Config;
 
 void print_config(Config c);
 
-void launch_mandelbrot(Config con, int *out);
+void launch_mandelbrot(Config con, char *out);

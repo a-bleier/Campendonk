@@ -13,7 +13,7 @@ extern "C"
         printf("Hello from cuda Core !\n");
     }
 
-    __global__ void mandelbrote_kernel(int *res, int len, double xDelta, double yDelta, double xStart, double yStart, int iterations)
+    __global__ void calculate_iterations(int *res, int len, double xDelta, double yDelta, double xStart, double yStart, int iterations)
     {
         int row = blockIdx.y * blockDim.y + threadIdx.y;
         int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -40,6 +40,20 @@ extern "C"
         res[col + gridDim.x * blockDim.x * row] = -1;
     }
 
+    __global__ void generate_texture(int *iterations, uint8_t *tex_buff){
+
+        int row = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+        int it_index = col + gridDim.x * blockDim.x * row;
+        
+        uint8_t s = (1 + (iterations[it_index] >= 0) - (iterations[it_index] < 0)) / 2; // it = -1 --> s = 0, it >= 0 --> s = 1
+        
+        int tex_index = gridDim.x * blockDim.x * row * 3 + col * 3;
+        tex_buff[tex_index] = s * (iterations[it_index] * 4); //red
+        tex_buff[tex_index+1] = s * (30 + iterations[it_index] * 3); //green
+        tex_buff[tex_index+2] = s * (100 + iterations[it_index] * 4); //blue
+    }
+
     void launch_test()
     {
 
@@ -48,33 +62,51 @@ extern "C"
         cudaDeviceSynchronize();
     }
 
-    void launch_mandelbrot(Config con, int *out)
+    void launch_mandelbrot(Config con, char *out)
     {
-        int *res;
-        int len = con.xDim * con.yDim;
-        CHECK(cudaMalloc((int **)&res, len * sizeof(int)));
-        cudaMemset(res, 0, len);
 
+        //buffer containing iterations
+        int *iterations;
+        int it_len = con.xDim * con.yDim;
+        CHECK(cudaMalloc((int **)&iterations, it_len * sizeof(int)));
+        cudaMemset(iterations, 0, it_len);
+
+        //buffer containing texture data
+        uint8_t *tex_buff;
+        int tex_len = con.xDim * con.yDim * 3;
+        CHECK(cudaMalloc((uint8_t **)&tex_buff, tex_len * sizeof(uint8_t)));
+        cudaMemset(tex_buff, 0, tex_len);
+
+        //buffer containing resulting image data
+        uint8_t *img_buff;
+        int img_len = con.xResolution * con.yResolution * 3;
+        CHECK(cudaMalloc((uint8_t **)&img_buff, img_len * sizeof(uint8_t)));
+        cudaMemset(img_buff, 0, img_len);
+
+        printf("here\n");
         //build cluster
         dim3 block(BLOCK_SIZE, BLOCK_SIZE);
         dim3 grid(ceilf((float) con.xDim / (float) BLOCK_SIZE), ceilf((float) con.yDim / (float) BLOCK_SIZE));
 
         CHECK(cudaDeviceSynchronize());
 
-        mandelbrote_kernel<<<grid, block>>>(res, len, con.xDelta, con.yDelta, con.xStart, con.yStart, con.iterations);
+        calculate_iterations<<<grid, block>>>(iterations, it_len, con.xDelta, con.yDelta, con.xStart, con.yStart, con.iterations);
+
+        CHECK(cudaDeviceSynchronize());
+
+        generate_texture<<<grid, block>>>(iterations, tex_buff);
 
         CHECK(cudaDeviceSynchronize());
 
         CHECK(cudaGetLastError());
-        CHECK(cudaMemcpy(out, res, len * sizeof(int), cudaMemcpyDeviceToHost));
+        // CHECK(cudaMemcpy(out, iterations, len * sizeof(int), cudaMemcpyDeviceToHost));
+        CHECK(cudaMemcpy(out, tex_buff, tex_len * sizeof(uint8_t), cudaMemcpyDeviceToHost));
         
-        // for(int i=1; i<len+1; i++){
-        //     printf("%d\t", out[i-1]);
-        //     if(i % 10 == 0) printf("\n");
-        // }
 
         printf("here\n");
-        CHECK(cudaFree(res));
+        CHECK(cudaFree(iterations));
+        CHECK(cudaFree(tex_buff));
+        CHECK(cudaFree(img_buff));
     }
 
     void print_config(Config c)
