@@ -8,10 +8,6 @@ extern "C"
 #include <stdio.h>
 #include "kernel.cuh"
 #include "common.cuh"
-    __global__ void test()
-    {
-        printf("Hello from cuda Core !\n");
-    }
 
     __global__ void calculate_iterations(int *res, int len, double xDelta, double yDelta, double xStart, double yStart, int iterations)
     {
@@ -25,6 +21,7 @@ extern "C"
         double x_old = 0;
         double y_old = 0;
         //iterate this point, check if it's in the set or not; write a result in res
+        // TODO Can I remove this branching ? 
         for(int i=0; i<iterations; i++){
             x = x_old * x_old - y_old * y_old + x_c;
             y = 2 * x_old * y_old + y_c;
@@ -53,13 +50,51 @@ extern "C"
         tex_buff[tex_index+1] = s * (30 + iterations[it_index] * 3); //green
         tex_buff[tex_index+2] = s * (100 + iterations[it_index] * 4); //blue
     }
+    
+    __device__ Color sample(uint8_t *tex_buff, int xDim, int x, int y) {
+        int index = y * xDim * 3 + x * 3;
+        return Color{tex_buff[index],tex_buff[index+1],tex_buff[index+2]};
+    }
 
-    void launch_test()
-    {
+    __device__ Color lerp(Color c1, Color c2, float f) {
+        return Color{
+            static_cast<unsigned char>((f * (c2.r-c1.r)) + c1.r),
+            static_cast<unsigned char>((f * (c2.g-c1.g)) + c1.g),
+            static_cast<unsigned char>((f * (c2.b-c1.b)) + c1.b)
+        };
+    }
 
-        // Call the kernel:
-        test<<<1, 1>>>();
-        cudaDeviceSynchronize();
+    __global__ void texture_filtering(uint8_t *tex_buff, uint8_t *img_buff, int xDim, int yDim, int xRes, int yRes){
+
+        int row = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+        float x = 1 / (float) xRes * (float) col;
+        float y = 1 / (float) yRes * (float) row;
+        
+        float x_tex = x * xDim;
+        float y_tex = y * yDim;
+
+        int x_texi = (int)x_tex;
+        int y_texi = (int)y_tex;
+        //a b 
+        //d c
+        Color a = sample(tex_buff, xDim, x_texi, y_texi);
+        Color b = sample(tex_buff, xDim, x_texi+1, y_texi);
+        Color c = sample(tex_buff, xDim, x_texi+1, y_texi+1);
+        Color d = sample(tex_buff, xDim, x_texi, y_texi+1);
+
+        //TODO lerp
+        float x_texf = x_tex - x_texi;
+        float y_texf = y_tex - y_texi;
+
+        Color res = lerp(lerp(a,b,x_texf),lerp(d,c,x_texf), y_texf);
+
+        int index = row * xRes * 3 + col * 3;
+        img_buff[index] = res.r;
+        img_buff[index+1] = res.g;
+        img_buff[index+2] = res.b;
+
     }
 
     void launch_mandelbrot(Config con, char *out)
@@ -98,9 +133,14 @@ extern "C"
 
         CHECK(cudaDeviceSynchronize());
 
+        dim3 grid_img(ceilf((float) con.xResolution / (float) BLOCK_SIZE), ceilf((float) con.yResolution / (float) BLOCK_SIZE));
+        texture_filtering<<<grid_img, block>>>(tex_buff,  img_buff, con.xDim, con.yDim, con.xResolution, con.yResolution);
+
+        CHECK(cudaDeviceSynchronize());
+
         CHECK(cudaGetLastError());
         // CHECK(cudaMemcpy(out, iterations, len * sizeof(int), cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(out, tex_buff, tex_len * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+        CHECK(cudaMemcpy(out, img_buff, img_len * sizeof(uint8_t), cudaMemcpyDeviceToHost));
         
 
         printf("here\n");

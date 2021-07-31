@@ -1,7 +1,6 @@
 #pragma once
 #include <stdio.h>
 #define BLOCK_SIZE 32
-void launch_test();
 
 typedef struct {
 	double xStart;
@@ -14,6 +13,12 @@ typedef struct {
 	int yResolution;
 	int iterations;
 } Config;
+
+typedef struct {
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+} Color;
 
 void print_config(Config c);
 

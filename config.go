@@ -46,15 +46,16 @@ func test_config() {
 }
 
 func test_mandelbrot() {
-	width, height := 256, 256
+	width, height := 512, 512
+	xRes, yRes := 1024, 1024
 
-	conf := &config{-1, 1, width, height, 0.01, -0.01, width, height, 1000} //testing: every point gets its pixel
+	conf := &config{-1, 1, width, height, 0.01, -0.01, 1024, 1024, 1000} //testing: every point gets its pixel
 	out := make([]C.char, conf.xResolution*conf.yResolution*3)
 	pointer := (&out[0])
 	C.launch_mandelbrot(conf.toC(), pointer)
 
 	upleft := image.Point{0, 0}
-	downright := image.Point{width, height}
+	downright := image.Point{xRes, yRes}
 
 	img := image.NewRGBA(image.Rectangle{upleft, downright})
 
