@@ -72,10 +72,11 @@ func main() {
 					if ev.Buttons.Contain(pointer.ButtonPrimary) { //presumably left click
 						fmt.Println("left click")
 						//TODO zoom in
-						img = conf.calculate(gtx.Constraints.Max, targetLocation, 1)
+						img = conf.calculate(gtx.Constraints.Max, targetLocation, 0.5)
 					} else if ev.Buttons.Contain(pointer.ButtonSecondary) { //presumably right click
 						fmt.Println("right click")
 						//TODO zoom out
+						img = conf.calculate(gtx.Constraints.Max, targetLocation, 2.0)
 					} else if ev.Buttons.Contain(pointer.ButtonTertiary) { //presumably middle click
 						fmt.Println("middle click")
 						//TODO adjust aspect ratio
